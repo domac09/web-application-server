@@ -5,9 +5,11 @@ import java.net.Socket;
 import java.nio.file.Files;
 import java.util.Map;
 
+import com.sun.tools.javac.util.StringUtils;
 import model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import util.IOUtils;
 
 import static util.HttpRequestUtils.parseQueryString;
 
@@ -31,33 +33,52 @@ public class RequestHandler extends Thread {
             String line = br.readLine();
             log.debug("request line = {}", line);
 
-            if(line == null){
+            if (line == null) {
                 return;
             }
 
             String[] tokens = line.split(" ");
+            String url = tokens[1];
+            int contentLength = 0;
 
-            while(!"".equals(line)){
+            while (!"".equals(line)) {
                 line = br.readLine();
                 log.debug("header : {}", line);
+
+                if (line.contains("Content-Length")) {
+                    contentLength = getContentLength(line);
+                }
             }
 
-            String url = tokens[1];
-            int index = url.indexOf("?");
-            String requestPath = url.substring(0, index);
-            String params = url.substring(index+1);
+            if (url.startsWith("/user/create")) {
+                String body = IOUtils.readData(br, contentLength);
+                User user = createUser(parseQueryString(body));
+                log.debug("User is = {}", user);
 
-            Map<String, String> parseQueryString = parseQueryString(params);
-
-            User user = createUser(parseQueryString);
-
-            log.debug("User is = {}", user);
+                DataOutputStream dos = new DataOutputStream(out);
+                response302Header(dos, "/index.html");
+            }
 
             byte[] body = Files.readAllBytes(new File("./webapp" + url).toPath());
 
             DataOutputStream dos = new DataOutputStream(out);
             response200Header(dos, body.length);
             responseBody(dos, body);
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    private int getContentLength(String line) {
+        String[] split = line.split(" ");
+        return Integer.parseInt(split[1]);
+    }
+
+    private void response302Header(DataOutputStream dos, String location) {
+        try {
+            dos.writeBytes("HTTP/1.1 302 Redirect \r\n");
+            dos.writeBytes("Location: " + location + " \r\n");
+            dos.writeBytes("\r\n");
         } catch (IOException e) {
             log.error(e.getMessage());
         }
