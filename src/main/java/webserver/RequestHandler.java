@@ -3,9 +3,13 @@ package webserver;
 import java.io.*;
 import java.net.Socket;
 import java.nio.file.Files;
+import java.util.Map;
 
+import model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static util.HttpRequestUtils.parseQueryString;
 
 public class RequestHandler extends Thread {
     private static final Logger log = LoggerFactory.getLogger(RequestHandler.class);
@@ -17,8 +21,7 @@ public class RequestHandler extends Thread {
     }
 
     public void run() {
-        log.debug("New Client Connect! Connected IP : {}, Port : {}", connection.getInetAddress(),
-                connection.getPort());
+        log.debug("New Client Connect! Connected IP : {}, Port : {}", connection.getInetAddress(), connection.getPort());
 
         // stream의 경우 try 구문에 선언을 하면 Closeable interface의 close구문이 자동으로 실행된다. jdk 1.7 문법
         try (InputStream in = connection.getInputStream(); OutputStream out = connection.getOutputStream()) {
@@ -39,7 +42,18 @@ public class RequestHandler extends Thread {
                 log.debug("header : {}", line);
             }
 
-            byte[] body = Files.readAllBytes(new File("./webapp" + tokens[1]).toPath());
+            String url = tokens[1];
+            int index = url.indexOf("?");
+            String requestPath = url.substring(0, index);
+            String params = url.substring(index+1);
+
+            Map<String, String> parseQueryString = parseQueryString(params);
+
+            User user = createUser(parseQueryString);
+
+            log.debug("User is = {}", user);
+
+            byte[] body = Files.readAllBytes(new File("./webapp" + url).toPath());
 
             DataOutputStream dos = new DataOutputStream(out);
             response200Header(dos, body.length);
@@ -47,6 +61,10 @@ public class RequestHandler extends Thread {
         } catch (IOException e) {
             log.error(e.getMessage());
         }
+    }
+
+    private User createUser(Map<String, String> parseQueryString) {
+        return new User(parseQueryString.get("userId"), parseQueryString.get("password"), parseQueryString.get("name"), parseQueryString.get("email"));
     }
 
     private void response200Header(DataOutputStream dos, int lengthOfBodyContent) {
