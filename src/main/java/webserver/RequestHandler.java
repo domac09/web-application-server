@@ -4,6 +4,7 @@ import db.DataBase;
 import model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import util.HttpStatusCode;
 import util.IOUtils;
 
 import java.io.*;
@@ -43,33 +44,50 @@ public class RequestHandler extends Thread {
             while (!"".equals(line)) {
                 line = br.readLine();
                 log.debug("header => {}", line);
-
                 if (line.startsWith("Content-Length")) {
                     String[] splitContentLength = line.split(":");
                     contentLength = Integer.parseInt(splitContentLength[1].trim());
+
                 }
+
+//                if (line.startsWith("Set-Cookie")) {
+//                    log.debug("header => {}", line);
+//                }
             }
 
             String method = pathMap.get("method");
             String path = pathMap.get("path");
-            String parameter = getParameter(br, contentLength, path, method);
-
-            int statusCode = controller(parameter, path);
+            Map<String, String> parameter = getParameter(br, contentLength, path, method);
 
             DataOutputStream dos = new DataOutputStream(out);
 
-            if (statusCode == 200) {
+            HttpStatusCode response = controller(parameter, path);
+
+            if (response.getStatusCode() == 200) {
                 byte[] body = Files.readAllBytes(new File("./webapp" + path).toPath());
 
                 int index = path.lastIndexOf(".");
                 String extension = path.substring(index + 1);
+
                 response200Header(dos, body.length, extension);
 
                 responseBody(dos, body);
             }
 
-            if (statusCode == 302) {
-                response302Header(dos, "/index.html");
+            if (response.getStatusCode() == 302) {
+                if(!"".equals(response.getCookies())){
+                    response302HeaderWithCookie(dos, response.getMessage(), response.getCookies());
+                }else{
+                    response302Header(dos, response.getMessage());
+                }
+            }
+
+            if (response.getStatusCode() == 404) {
+                response302Header(dos, response.getMessage());
+            }
+
+            if(response.getStatusCode() == 201){
+                response302Header(dos, response.getMessage());
             }
 
 
@@ -78,34 +96,51 @@ public class RequestHandler extends Thread {
         }
     }
 
-    private String getParameter(BufferedReader br, int contentLength, String path, String method) throws IOException {
+    private Map<String, String> getParameter(BufferedReader br, int contentLength, String path, String method) throws IOException {
         if (method.equals("GET")) {
             String[] getParams = path.split("\\?");
             if (getParams.length > 1) {
-                return getParams[1];
+                return parseQueryString(getParams[1]);
             }
         }
 
         if (method.equals("POST")) {
-            return IOUtils.readData(br, contentLength);
+            return parseQueryString(IOUtils.readData(br, contentLength));
         }
 
-        return "";
+        return new HashMap<>();
     }
 
-    private int controller(String parameter, String path) {
-        if (path.startsWith("/user/create")) {
-            DataBase.addUser(userCreate(parameter));
+    private HttpStatusCode controller(Map<String, String> parameter, String path) {
 
-            return 302;
+        if (path.equals("/user/create")) {
+            DataBase.addUser(
+                    userCreate(
+                            parameter.get("userId"),
+                            parameter.get("password"),
+                            parameter.get("name"),
+                            parameter.get("email")
+                    )
+            );
+
+            return new HttpStatusCode(201, "/index.html");
         }
 
-        return 200;
+        if (path.equals("/user/login")) {
+            User user = DataBase.findUserById(parameter.get("userId"));
+
+            if (user == null) {
+                return new HttpStatusCode(404, "/user/login_failed.html");
+            }
+
+            return new HttpStatusCode(302, "/index.html", "login=true");
+        }
+
+        return new HttpStatusCode(200);
     }
 
-    private User userCreate(String data) {
-        Map<String, String> parseQueryString = parseQueryString(data);
-        return new User(parseQueryString.get("userId"), parseQueryString.get("password"), parseQueryString.get("name"), parseQueryString.get("email"));
+    private User userCreate(String userId, String password, String name, String email) {
+        return new User(userId, password, name, email);
     }
 
     private Map<String, String> getPath(String line) {
@@ -131,10 +166,20 @@ public class RequestHandler extends Thread {
     }
 
     private void response302Header(DataOutputStream dos, String path) {
-
         try {
             dos.writeBytes("HTTP/1.1 302 Found \r\n");
             dos.writeBytes("Location: " + path + "\r\n");
+            dos.writeBytes("\r\n");
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    private void response302HeaderWithCookie(DataOutputStream dos, String path, String cookie) {
+        try {
+            dos.writeBytes("HTTP/1.1 302 Found \r\n");
+            dos.writeBytes("Location: " + path + "\r\n");
+            dos.writeBytes("Set-Cookie: " + cookie + "\r\n");
             dos.writeBytes("\r\n");
         } catch (IOException e) {
             log.error(e.getMessage());
