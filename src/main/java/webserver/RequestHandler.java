@@ -1,5 +1,6 @@
 package webserver;
 
+import db.DataBase;
 import model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -7,7 +8,6 @@ import util.IOUtils;
 
 import java.io.*;
 import java.net.Socket;
-import java.net.URLDecoder;
 import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
@@ -24,7 +24,7 @@ public class RequestHandler extends Thread {
     }
 
     public void run() {
-        log.debug("New Client Connect! Connected IP : {}, Port : {}", connection.getInetAddress(), connection.getPort());
+//        log.debug("New Client Connect! Connected IP : {}, Port : {}", connection.getInetAddress(), connection.getPort());
 
         // stream의 경우 try 구문에 선언을 하면 Closeable interface의 close 구문이 자동으로 실행된다. jdk 1.7 문법
         try (InputStream in = connection.getInputStream(); OutputStream out = connection.getOutputStream()) {
@@ -36,8 +36,6 @@ public class RequestHandler extends Thread {
             if (line == null) {
                 return;
             }
-
-            log.debug("line => {}", line);
 
             Map<String, String> pathMap = getPath(line);
             int contentLength = 0;
@@ -52,52 +50,61 @@ public class RequestHandler extends Thread {
                 }
             }
 
-            String path = pathMap.get("path");
             String method = pathMap.get("method");
+            String path = pathMap.get("path");
+            String parameter = getParameter(br, contentLength, path, method);
+
+            int statusCode = controller(parameter, path);
 
             DataOutputStream dos = new DataOutputStream(out);
-            byte[] body = Files.readAllBytes(new File("./webapp" + path).toPath());
 
-            int index = path.lastIndexOf(".");
-            String extension = path.substring(index + 1);
+            if (statusCode == 200) {
+                byte[] body = Files.readAllBytes(new File("./webapp" + path).toPath());
 
-            // business logic
-            controller(br, contentLength, path, method, dos);
+                int index = path.lastIndexOf(".");
+                String extension = path.substring(index + 1);
+                response200Header(dos, body.length, extension);
 
-            response200Header(dos, body.length, extension);
+                responseBody(dos, body);
+            }
 
-            responseBody(dos, body);
+            if (statusCode == 302) {
+                response302Header(dos, "/index.html");
+            }
+
 
         } catch (IOException e) {
             log.error(e.getMessage());
         }
     }
 
-    private void controller(BufferedReader br, int contentLength, String path, String method, DataOutputStream dos) throws IOException {
-        if (path.startsWith("/user/create")) {
-            User user = null;
-
-            if (method.equals("GET")) {
-                String[] userParams = path.split("\\?");
-                if (userParams.length > 1) {
-                    user = userCreate(userParams[1]);
-                }
-            }
-
-            if (method.equals("POST")) {
-                String userParams = IOUtils.readData(br, contentLength);
-                user = userCreate(userParams);
-            }
-            log.debug("User created => {}", user);
-
-            if (user != null) {
-                response302Header(dos, "/index.html");
+    private String getParameter(BufferedReader br, int contentLength, String path, String method) throws IOException {
+        if (method.equals("GET")) {
+            String[] getParams = path.split("\\?");
+            if (getParams.length > 1) {
+                return getParams[1];
             }
         }
+
+        if (method.equals("POST")) {
+            return IOUtils.readData(br, contentLength);
+        }
+
+        return "";
     }
 
-    private User userCreate(String data) throws UnsupportedEncodingException {
-        Map<String, String> parseQueryString = parseQueryString(URLDecoder.decode(data, "UTF-8"));
+    private int controller(String parameter, String path) {
+        if (path.startsWith("/user/create")) {
+            DataBase.addUser(userCreate(parameter));
+
+            return 302;
+        }
+
+        return 200;
+    }
+
+    private User userCreate(String data) {
+        Map<String, String> parseQueryString = parseQueryString(data);
         return new User(parseQueryString.get("userId"), parseQueryString.get("password"), parseQueryString.get("name"), parseQueryString.get("email"));
     }
 
