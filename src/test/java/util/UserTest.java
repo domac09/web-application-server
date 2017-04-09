@@ -5,6 +5,7 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URLDecoder;
 import java.util.Map;
 
 import static org.hamcrest.CoreMatchers.is;
@@ -25,12 +26,21 @@ public class UserTest {
         String url = this.url;
         int index = url.indexOf("?");
         String requestPath = url.substring(0, index);
-        String params = url.substring(index+1);
+        String params = url.substring(index + 1);
 
         Map<String, String> parseQueryString = parseQueryString(params);
 
         logger.info("{}", parseQueryString);
 
         assertThat(parseQueryString.get("userId"), is("1123"));
+    }
+
+
+    @Test
+    public void CanNotGetUserByGet() throws Exception {
+        String url = "/user/create";
+        String[] params = url.split("\\?");
+
+        assertThat(params.length, is(1));
     }
 }

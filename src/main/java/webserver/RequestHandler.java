@@ -3,7 +3,6 @@ package webserver;
 import model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import util.HttpRequestUtils;
 import util.IOUtils;
 
 import java.io.*;
@@ -25,7 +24,7 @@ public class RequestHandler extends Thread {
     }
 
     public void run() {
-        log.debug("New Client Connect! Connected IP : {}, Port : {}", connection.getInetAddress(), connection.getPort());
+//        log.debug("New Client Connect! Connected IP : {}, Port : {}", connection.getInetAddress(), connection.getPort());
 
         // stream의 경우 try 구문에 선언을 하면 Closeable interface의 close 구문이 자동으로 실행된다. jdk 1.7 문법
         try (InputStream in = connection.getInputStream(); OutputStream out = connection.getOutputStream()) {
@@ -40,26 +39,44 @@ public class RequestHandler extends Thread {
 
             log.debug("line => {}", line);
 
-            String path = getPath(line);
+            Map<String, String> path = getPath(line);
+
+            int contentLength = 0;
 
             while (!"".equals(line)) {
                 line = br.readLine();
                 log.debug("header => {}", line);
+
+                if (line.startsWith("Content-Length")) {
+                    String[] splitContentLength = line.split(":");
+                    contentLength = Integer.parseInt(splitContentLength[1].trim());
+                }
             }
 
-            // user cleare logic
-            String[] params = path.split("\\?");
-            Map<String, String> parseQueryString = parseQueryString(URLDecoder.decode(params[1], "UTF-8"));
-            User user = new User(parseQueryString.get("userId"), parseQueryString.get("password"), parseQueryString.get("name"), parseQueryString.get("email"));
+            String url = path.get("url");
+            if (url.startsWith("/user/create")) {
 
-            log.debug("user registration => {} ",user);
+                User user = null;
+                String method = path.get("method");
+                if (method.equals("GET")) {
+                    String[] userParams = url.split("\\?");
+                    if (userParams.length > 1) {
+                        user = userCreate(userParams[1]);
+                    }
+                }
+
+                if (method.equals("POST")) {
+                    String userParams = IOUtils.readData(br, contentLength);
+                    user = userCreate(userParams);
+                }
+                log.debug("User created => {}", user);
+            }
 
             DataOutputStream dos = new DataOutputStream(out);
             byte[] body = Files.readAllBytes(new File("./webapp" + path).toPath());
 
-            log.debug("path => {}", path);
-            int index = path.lastIndexOf(".");
-            String extension = path.substring(index + 1);
+            int index = url.lastIndexOf(".");
+            String extension = url.substring(index + 1);
 
             response200Header(dos, body.length, extension);
 
@@ -70,9 +87,19 @@ public class RequestHandler extends Thread {
         }
     }
 
-    private String getPath(String line) {
+    private User userCreate(String data) throws UnsupportedEncodingException {
+        Map<String, String> parseQueryString = parseQueryString(URLDecoder.decode(data, "UTF-8"));
+        return new User(parseQueryString.get("userId"), parseQueryString.get("password"), parseQueryString.get("name"), parseQueryString.get("email"));
+    }
+
+    private Map<String, String> getPath(String line) {
         String[] split = line.split(" ");
-        return split[1];
+
+        Map<String, String> map = new HashMap<>();
+        map.put("method", split[0]);
+        map.put("url", split[1]);
+
+        return map;
     }
 
     private void response200Header(DataOutputStream dos, int lengthOfBodyContent, String extension) {
