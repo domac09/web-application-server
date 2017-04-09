@@ -3,10 +3,12 @@ package webserver;
 import model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import util.HttpRequestUtils;
 import util.IOUtils;
 
 import java.io.*;
 import java.net.Socket;
+import java.net.URLDecoder;
 import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
@@ -47,19 +49,10 @@ public class RequestHandler extends Thread {
 
             // user cleare logic
             String[] params = path.split("\\?");
+            Map<String, String> parseQueryString = parseQueryString(URLDecoder.decode(params[1], "UTF-8"));
+            User user = new User(parseQueryString.get("userId"), parseQueryString.get("password"), parseQueryString.get("name"), parseQueryString.get("email"));
 
-
-            log.debug("params => {}", params[1]);
-            String[] userValue = params[1].split("&");
-            Map<String, String> map = new HashMap<>();
-
-            for (String args : userValue) {
-                String[] splitParams = args.split("=");
-                map.put(splitParams[0], splitParams[1]);
-            }
-
-            log.debug("converted map of params => {}", map);
-
+            log.debug("user registration => {} ",user);
 
             DataOutputStream dos = new DataOutputStream(out);
             byte[] body = Files.readAllBytes(new File("./webapp" + path).toPath());
