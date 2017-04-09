@@ -24,7 +24,7 @@ public class RequestHandler extends Thread {
     }
 
     public void run() {
-//        log.debug("New Client Connect! Connected IP : {}, Port : {}", connection.getInetAddress(), connection.getPort());
+        log.debug("New Client Connect! Connected IP : {}, Port : {}", connection.getInetAddress(), connection.getPort());
 
         // stream의 경우 try 구문에 선언을 하면 Closeable interface의 close 구문이 자동으로 실행된다. jdk 1.7 문법
         try (InputStream in = connection.getInputStream(); OutputStream out = connection.getOutputStream()) {
@@ -39,8 +39,7 @@ public class RequestHandler extends Thread {
 
             log.debug("line => {}", line);
 
-            Map<String, String> path = getPath(line);
-
+            Map<String, String> pathMap = getPath(line);
             int contentLength = 0;
 
             while (!"".equals(line)) {
@@ -53,30 +52,17 @@ public class RequestHandler extends Thread {
                 }
             }
 
-            String url = path.get("url");
-            if (url.startsWith("/user/create")) {
-
-                User user = null;
-                String method = path.get("method");
-                if (method.equals("GET")) {
-                    String[] userParams = url.split("\\?");
-                    if (userParams.length > 1) {
-                        user = userCreate(userParams[1]);
-                    }
-                }
-
-                if (method.equals("POST")) {
-                    String userParams = IOUtils.readData(br, contentLength);
-                    user = userCreate(userParams);
-                }
-                log.debug("User created => {}", user);
-            }
+            String path = pathMap.get("path");
+            String method = pathMap.get("method");
 
             DataOutputStream dos = new DataOutputStream(out);
             byte[] body = Files.readAllBytes(new File("./webapp" + path).toPath());
 
-            int index = url.lastIndexOf(".");
-            String extension = url.substring(index + 1);
+            int index = path.lastIndexOf(".");
+            String extension = path.substring(index + 1);
+
+            // business logic
+            controller(br, contentLength, path, method, dos);
 
             response200Header(dos, body.length, extension);
 
@@ -84,6 +70,29 @@ public class RequestHandler extends Thread {
 
         } catch (IOException e) {
             log.error(e.getMessage());
+        }
+    }
+
+    private void controller(BufferedReader br, int contentLength, String path, String method, DataOutputStream dos) throws IOException {
+        if (path.startsWith("/user/create")) {
+            User user = null;
+
+            if (method.equals("GET")) {
+                String[] userParams = path.split("\\?");
+                if (userParams.length > 1) {
+                    user = userCreate(userParams[1]);
+                }
+            }
+
+            if (method.equals("POST")) {
+                String userParams = IOUtils.readData(br, contentLength);
+                user = userCreate(userParams);
+            }
+            log.debug("User created => {}", user);
+
+            if (user != null) {
+                response302Header(dos, "/index.html");
+            }
         }
     }
 
@@ -97,7 +106,7 @@ public class RequestHandler extends Thread {
 
         Map<String, String> map = new HashMap<>();
         map.put("method", split[0]);
-        map.put("url", split[1]);
+        map.put("path", split[1]);
 
         return map;
     }
@@ -108,6 +117,17 @@ public class RequestHandler extends Thread {
             dos.writeBytes("HTTP/1.1 200 OK \r\n");
             dos.writeBytes("Content-Type: " + getContentType(extension) + "\r\n");
             dos.writeBytes("Content-Length: " + lengthOfBodyContent + "\r\n");
+            dos.writeBytes("\r\n");
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    private void response302Header(DataOutputStream dos, String path) {
+
+        try {
+            dos.writeBytes("HTTP/1.1 302 Found \r\n");
+            dos.writeBytes("Location: " + path + "\r\n");
             dos.writeBytes("\r\n");
         } catch (IOException e) {
             log.error(e.getMessage());
