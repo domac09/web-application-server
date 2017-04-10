@@ -24,7 +24,7 @@ public class RequestHandler extends Thread {
     }
 
     public void run() {
-//        log.debug("New Client Connect! Connected IP : {}, Port : {}", connection.getInetAddress(), connection.getPort());
+        log.debug("New Client Connect! Connected IP : {}, Port : {}", connection.getInetAddress(), connection.getPort());
 
         // stream의 경우 try 구문에 선언을 하면 Closeable interface의 close 구문이 자동으로 실행된다. jdk 1.7 문법
         try (InputStream in = connection.getInputStream(); OutputStream out = connection.getOutputStream()) {
@@ -134,15 +134,23 @@ public class RequestHandler extends Thread {
         }
 
         if (path.equals("/user/list")) {
-            if("login=true".equals(parameter.get("cookie"))){
-                Collection<User> all = DataBase.findAll();
 
-                for (User user : all) {
-                    log.debug("User list => {}", user);
-                }
-            }else{
+            if("login=false".equals(parameter.get("cookie")) || parameter.get("cookie") == null){
                 return new HttpStatusCode(401, "/user/login_failed.html", "login=false");
             }
+
+            Collection<User> all = DataBase.findAll();
+
+            for (User user : all) {
+                StringBuilder stringBuilder = new StringBuilder();
+                stringBuilder.append(user.getUserId()+"||");
+                stringBuilder.append(user.getPassword()+"||");
+                stringBuilder.append(user.getName()+"||");
+                stringBuilder.append(user.getEmail()+";");
+
+                log.debug("user list => {}", stringBuilder);
+            }
+
         }
 
         return new HttpStatusCode(200);
