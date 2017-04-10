@@ -10,8 +10,7 @@ import util.IOUtils;
 import java.io.*;
 import java.net.Socket;
 import java.nio.file.Files;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 import static util.HttpRequestUtils.parseQueryString;
 
@@ -40,6 +39,7 @@ public class RequestHandler extends Thread {
 
             Map<String, String> pathMap = getPath(line);
             int contentLength = 0;
+            String cookie = null;
 
             while (!"".equals(line)) {
                 line = br.readLine();
@@ -50,14 +50,16 @@ public class RequestHandler extends Thread {
 
                 }
 
-//                if (line.startsWith("Set-Cookie")) {
-//                    log.debug("header => {}", line);
-//                }
+                if (line.startsWith("Cookie")) {
+                    String[] splitCookiValue = line.split(":");
+                    cookie = splitCookiValue[1].trim();
+                }
             }
 
             String method = pathMap.get("method");
             String path = pathMap.get("path");
             Map<String, String> parameter = getParameter(br, contentLength, path, method);
+            parameter.put("cookie", cookie);
 
             DataOutputStream dos = new DataOutputStream(out);
 
@@ -75,21 +77,16 @@ public class RequestHandler extends Thread {
             }
 
             if (response.getStatusCode() == 302) {
-                if(!"".equals(response.getCookies())){
-                    response302HeaderWithCookie(dos, response.getMessage(), response.getCookies());
-                }else{
-                    response302Header(dos, response.getMessage());
-                }
+                response302HeaderWithCookie(dos, response.getMessage(), response.getCookies());
             }
 
-            if (response.getStatusCode() == 404) {
+            if (response.getStatusCode() == 401) {
+                response302HeaderWithCookie(dos, response.getMessage(), response.getCookies());
+            }
+
+            if (response.getStatusCode() == 201) {
                 response302Header(dos, response.getMessage());
             }
-
-            if(response.getStatusCode() == 201){
-                response302Header(dos, response.getMessage());
-            }
-
 
         } catch (IOException e) {
             log.error(e.getMessage());
@@ -130,10 +127,10 @@ public class RequestHandler extends Thread {
             User user = DataBase.findUserById(parameter.get("userId"));
 
             if (user == null) {
-                return new HttpStatusCode(404, "/user/login_failed.html");
+                return new HttpStatusCode(401, "/user/login_failed.html", "login=false;");
             }
 
-            return new HttpStatusCode(302, "/index.html", "login=true");
+            return new HttpStatusCode(302, "/index.html", "login=true;");
         }
 
         return new HttpStatusCode(200);
