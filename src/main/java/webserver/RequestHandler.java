@@ -127,10 +127,22 @@ public class RequestHandler extends Thread {
             User user = DataBase.findUserById(parameter.get("userId"));
 
             if (user == null) {
-                return new HttpStatusCode(401, "/user/login_failed.html", "login=false;");
+                return new HttpStatusCode(401, "/user/login_failed.html", "login=false");
             }
 
-            return new HttpStatusCode(302, "/index.html", "login=true;");
+            return new HttpStatusCode(302, "/index.html", "login=true");
+        }
+
+        if (path.equals("/user/list")) {
+            if("login=true".equals(parameter.get("cookie"))){
+                Collection<User> all = DataBase.findAll();
+
+                for (User user : all) {
+                    log.debug("User list => {}", user);
+                }
+            }else{
+                return new HttpStatusCode(401, "/user/login_failed.html", "login=false");
+            }
         }
 
         return new HttpStatusCode(200);
