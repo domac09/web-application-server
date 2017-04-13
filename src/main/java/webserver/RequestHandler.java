@@ -76,12 +76,12 @@ public class RequestHandler extends Thread {
                 responseBody(dos, body);
             }
 
-            if (response.getStatusCode() == 302) {
-                response302HeaderWithCookie(dos, response.getMessage(), response.getCookies());
+            if (response.getStatusCode() == 303) {
+                response303HeaderWithCookie(dos, response.getMessage(), response.getCookies());
             }
 
             if (response.getStatusCode() == 401) {
-                response302HeaderWithCookie(dos, response.getMessage(), response.getCookies());
+                response303HeaderWithCookie(dos, response.getMessage(), response.getCookies());
             }
 
             if (response.getStatusCode() == 201) {
@@ -126,16 +126,16 @@ public class RequestHandler extends Thread {
         if (path.equals("/user/login")) {
             User user = DataBase.findUserById(parameter.get("userId"));
 
-            if (user == null) {
+            if (user == null || !user.getPassword().equals(parameter.get("password"))) {
                 return new HttpStatusCode(401, "/user/login_failed.html", "login=false");
             }
 
-            return new HttpStatusCode(302, "/index.html", "login=true");
+            return new HttpStatusCode(303, "/index.html", "login=true");
         }
 
         if (path.equals("/user/list")) {
 
-            if("login=false".equals(parameter.get("cookie")) || parameter.get("cookie") == null){
+            if (parameter.get("cookie").contains("login=false")) {
                 return new HttpStatusCode(401, "/user/login_failed.html", "login=false");
             }
 
@@ -143,10 +143,10 @@ public class RequestHandler extends Thread {
 
             for (User user : all) {
                 StringBuilder stringBuilder = new StringBuilder();
-                stringBuilder.append(user.getUserId()+"||");
-                stringBuilder.append(user.getPassword()+"||");
-                stringBuilder.append(user.getName()+"||");
-                stringBuilder.append(user.getEmail()+";");
+                stringBuilder.append(user.getUserId() + "||");
+                stringBuilder.append(user.getPassword() + "||");
+                stringBuilder.append(user.getName() + "||");
+                stringBuilder.append(user.getEmail() + ";");
 
                 log.debug("user list => {}", stringBuilder);
             }
@@ -184,7 +184,7 @@ public class RequestHandler extends Thread {
 
     private void response302Header(DataOutputStream dos, String path) {
         try {
-            dos.writeBytes("HTTP/1.1 302 Found \r\n");
+            dos.writeBytes("HTTP/1.1 302 Redirect \r\n");
             dos.writeBytes("Location: " + path + "\r\n");
             dos.writeBytes("\r\n");
         } catch (IOException e) {
@@ -192,9 +192,9 @@ public class RequestHandler extends Thread {
         }
     }
 
-    private void response302HeaderWithCookie(DataOutputStream dos, String path, String cookie) {
+    private void response303HeaderWithCookie(DataOutputStream dos, String path, String cookie) {
         try {
-            dos.writeBytes("HTTP/1.1 302 Found \r\n");
+            dos.writeBytes("HTTP/1.1 303 See Other \r\n");
             dos.writeBytes("Location: " + path + "\r\n");
             dos.writeBytes("Set-Cookie: " + cookie + "\r\n");
             dos.writeBytes("\r\n");
