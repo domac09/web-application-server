@@ -6,6 +6,7 @@ public class User {
     private String name;
     private String email;
 
+    // todo builder 패턴 적용해보자..
     public User(String userId, String password, String name, String email) {
         this.userId = userId;
         this.password = password;
